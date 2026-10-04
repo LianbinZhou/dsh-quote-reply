@@ -12,6 +12,9 @@
     "quote",
     "selection"
   ],
+  "scripts": {
+    "test": "node test/sink.test.mjs"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",

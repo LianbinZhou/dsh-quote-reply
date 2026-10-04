@@ -125,6 +125,29 @@ git clone https://github.com/LianbinZhou/dsh-quote-reply.git
 | `cordis.patch.yml` | bundle 的 patch 入口，往插件名单里插一行 |
 | `package.json` | 包清单，`dsh.client` 段声明浏览器侧入口 |
 | `locale/en.json`、`locale/zh.json` | 插件列表里显示的名称与描述（`{ meta: { title, description } }`）。**必须同时列进 `package.json` 的 `exports`**，否则 DSH 解析不到，列表里就是空白 |
+| `test/sink.test.mjs` | 零依赖回归测试。把浏览器侧真加载起来跑一遍，守着"别把用户已经打好的字抹掉"这条底线 |
+
+## 开发 / 测试
+
+零依赖，不用 `npm install`：
+
+```bash
+node test/sink.test.mjs
+# 或者
+npm test
+```
+
+这个测试**不需要浏览器、不装 React**：它用假的模块加载器把 `client.js` 真加载起来，
+给 sink 喂**运行时真正会喂的那些东西**（`inputActions` 是 prop，草稿走 `useInput` 钩子），然后看它究竟往输入框里写了什么。
+
+它专门盯着两个已经踩过的坑：
+
+| 场景 | 底线 |
+|---|---|
+| 输入框里已经有字 | 引用接在后面，**原来的字必须还在** |
+| 草稿拿不到（钩子缺失） | **绝不允许**调 `setDraft`——那是整篇重写，会把用户的内容抹掉 |
+
+> 这两条就是"先打字、再引用，字全没了"那个 bug 的守门员。
 
 ## License
 
