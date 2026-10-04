@@ -27,7 +27,7 @@ window.__ModuleLoader__.load({
 
     const NS = 'dsh-quote-reply';
     const OVERLAY_SLOT = 'shell.overlay';
-    const DOCK_SLOT = 'conversation.input.dock';
+    const SINK_SLOT = 'conversation.input.overlay';
     const MENU_ID = 'quote-reply.menu';
     const SINK_ID = 'quote-reply.sink';
 
@@ -508,21 +508,11 @@ window.__ModuleLoader__.load({
         };
       }, []);
 
-      /* This entry lives in the dock directly above the composer, and the dock
-       * re-renders on every keystroke. Returning null left a bare entry whose
-       * box flickered in and out of the dock's flex layout, shifting the whole
-       * conversation. Render a zero-sized absolutely positioned node instead:
-       * present in the DOM, but outside layout, so nothing can move. */
-      return h('span', {
-        'aria-hidden': true,
-        style: {
-          position: 'absolute',
-          width: 0,
-          height: 0,
-          overflow: 'hidden',
-          pointerEvents: 'none',
-        },
-      });
+      /* Nothing to draw: this entry exists only to receive `inputActions`. It
+       * sits in the composer's floating layer, where a closed entry is the
+       * normal state (the slash menu lives there and draws nothing until it
+       * opens), so it takes no part in the composer's layout. */
+      return null;
     }
 
     /* ------------------------------------------------------------------ *
@@ -548,8 +538,8 @@ window.__ModuleLoader__.load({
 
         ctx.effect(
           () =>
-            ctx.slots.inject(DOCK_SLOT, () =>
-              ctx.slots.register({ name: DOCK_SLOT, id: SINK_ID, order: 300 }, QuoteSink),
+            ctx.slots.inject(SINK_SLOT, () =>
+              ctx.slots.register({ name: SINK_SLOT, id: SINK_ID, order: 300 }, QuoteSink),
             ),
           'quote-reply: composer sink',
         );
