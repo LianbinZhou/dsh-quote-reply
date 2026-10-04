@@ -292,6 +292,8 @@ window.__ModuleLoader__.load({
         }
 
         function onSelectionChange() {
+          /* Typing fires this on every keystroke; nothing to do while closed. */
+          if (!openRef.current) return;
           const sel = window.getSelection();
           if (!sel || sel.isCollapsed) close();
         }
@@ -506,7 +508,21 @@ window.__ModuleLoader__.load({
         };
       }, []);
 
-      return null;
+      /* This entry lives in the dock directly above the composer, and the dock
+       * re-renders on every keystroke. Returning null left a bare entry whose
+       * box flickered in and out of the dock's flex layout, shifting the whole
+       * conversation. Render a zero-sized absolutely positioned node instead:
+       * present in the DOM, but outside layout, so nothing can move. */
+      return h('span', {
+        'aria-hidden': true,
+        style: {
+          position: 'absolute',
+          width: 0,
+          height: 0,
+          overflow: 'hidden',
+          pointerEvents: 'none',
+        },
+      });
     }
 
     /* ------------------------------------------------------------------ *
