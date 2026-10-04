@@ -7,11 +7,15 @@
  *     document for a finished text selection and, when the selection does not
  *     belong to an editable field, floats a small Quote / Copy card above it.
  *
- *  2. `conversation.input.dock` (session scope) — the composer sink. The menu
+ *  2. `conversation.input.overlay` (session scope) — the composer sink. The menu
  *     cannot reach the composer itself (the overlay layer is root scope and
  *     carries no session props), so the two halves meet on the module-local
  *     `sinkHandlers` registry: the sink is the only side that holds
  *     `inputActions`, and it is the side that writes the quote into the draft.
+ *
+ *     It lives in the composer's floating layer, never in
+ *     `conversation.input.dock`: a bare entry in that strip shifted the whole
+ *     conversation on the first keystroke of an IME composition.
  *
  * The quote is plain text: `> line` per line plus a trailing blank line, so
  * the composer keeps ordinary editable text and the selected passage travels
