@@ -1,0 +1,38 @@
+{
+  "name": "dsh-quote-reply",
+  "version": "0.1.0",
+  "description": "Quote text from the dsh Web conversation into the composer: select any message text and a floating menu offers Quote / Copy, so the next question can carry the exact passage it is about",
+  "type": "module",
+  "license": "MIT",
+  "author": "Lianbin Zhou",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "quote",
+    "selection"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}

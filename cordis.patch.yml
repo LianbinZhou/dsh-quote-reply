@@ -1,0 +1,10 @@
+# dsh-quote-reply bundle patch: inserts one plugin row into the plugin roster.
+#
+# The row mounts both halves of the package:
+#   - host half  (index.js)  : empty; the feature is browser presentation only.
+#   - browser half (client.js): the selection menu (shell.overlay) and the
+#     composer sink that receives a quote and writes it into the draft
+#     (conversation.input.dock).
+- insert:
+    - id: quote-reply
+      name: 'dsh-quote-reply'
