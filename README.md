@@ -2,7 +2,7 @@
 
 在 dsh（DeepSeek Harness）的 Web 界面里**划选任意对话文字，浮出「引用 / 复制」小卡片**。
 
-点「引用」，这段原文就以 Markdown 引用块的形式落进输入框的光标处，你接着写问题——模型能直接读到你引的是哪一段。
+点「引用」，这段原文就以 Markdown 引用块的形式追加到输入框草稿的末尾，你接着写问题——模型能直接读到你引的是哪一段。
 
 > 交互抄的是通义千问那套「划词浮条」。dsh 官方没做这个交互，这里补上。
 
@@ -43,6 +43,7 @@ git clone https://github.com/LianbinZhou/dsh-quote-reply.git
 | 点别处 / 按 Esc / 页面滚动 / 右键 | 卡片自动收起 |
 | 卡片已经开着时点右键 | 卡片先让开，系统的右键菜单正常出现（dsh 自带的「复制」不受影响） |
 | 引用多行文字 | 每行都加 `> `，整段仍是一个引用块；连续空行会被压成一个 |
+| 引用落到草稿的哪儿 | **追加到草稿末尾**，不是插在光标处（草稿本来就是空的时候感觉不到差别） |
 | 引用的是一整个**表格** | 自动拼成 Markdown 表格（而不是浏览器给的制表符文本）：列宽不一致会补齐，单元格里的 `|` 会转义 |
 | 浅色 / 深色主题 | 跟着 dsh 的主题走，颜色全部取自 `--dsw-alias-*` 主题变量 |
 
@@ -61,16 +62,29 @@ git clone https://github.com/LianbinZhou/dsh-quote-reply.git
 | Slot | 作用域 | 干的事 |
 |---|---|---|
 | `shell.overlay` | root | 浮层菜单。监听 `mouseup`，读 `window.getSelection()`，自己画卡片 |
-| `conversation.input.overlay` | session | 收口。菜单层拿不到 `inputActions`（那是 session 作用域的 props），所以两层通过模块内的一个小注册表交接，由 sink 调 `inputActions.captureInsertion()` + `insertText()` 把引用写进草稿 |
+| `conversation.input.overlay` | session | 收口。菜单层拿不到 `inputActions`（那是 session 作用域的 props），所以两层通过模块内的一个小注册表交接，由 sink 调 `inputActions.setDraft()` 把引用写进草稿 |
 
-写草稿失败时（比如草稿版本变了）退化为 `setDraft(现有草稿 + 引用)`。
+草稿里已经存在 `@文件` 引用胶囊时，改走旧的 `captureInsertion()` + `insertText()` 路径——重写整个草稿会把胶囊压成纯文本。
 
-> ⚠️ **收口为什么不在 `conversation.input.dock`？**（踩过的坑）
+> ⚠️ **收口为什么不在 `conversation.input.dock`？**（踩过的坑一）
 >
 > `dock` 是输入框**上方**那条，而且**每次输入都会重渲染**。一个"只为拿 props、不画任何东西"的条目挂上去，
 > 会让**中文输入法组字的第一下**（`compositionstart`）把整个对话区连着输入框顶得抖一下；
 > **纯英文输入却不抖**——英文是逐字上屏，中文要先进入组字状态，两条路径不一样。
 > 挪到 composer 内部的浮层 `conversation.input.overlay` 之后症状消失：那里"关闭状态不画东西"本来就是常态（slash 菜单平时就住那儿）。
+
+> ⚠️ **写草稿为什么用 `setDraft` 而不是 `insertText`？**（踩过的坑二，比坑一更隐蔽）
+>
+> DSH 有两条写入输入框的路，**多行文本的内部结构不同**：
+>
+> | 路径 | 多行文本变成什么 |
+> |---|---|
+> | `insertText(text, span)` | 走 Lexical 的 `RangeSelection.insertText`：**所有行塞进同一个段落**，行间是软换行 |
+> | `setDraft(text)` | 源码里逐行 `split("\n")`：**每行一个独立段落**，跟手动打字一样 |
+>
+> 屏幕上看不出差别，但**中文输入法组字时要测量光标在段落里的位置**——光标落在"一个塞了好几行的巨大段落"里时，
+> 这个测量会抽风，把整个对话区顶得跳一下；**英文没有组字这一步，永远不跳**。
+> 代价：`setDraft` 是"重写整个草稿"，会丢掉草稿里的引用胶囊，光标也固定落到末尾。
 
 **这个插件不发送任何模型请求、不写任何会话事件、不读别的插件的 DOM。** 引用只是普通文本，跟着你按发送键走正常流程。
 
