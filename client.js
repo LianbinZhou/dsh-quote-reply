@@ -81,6 +81,85 @@ window.__ModuleLoader__.load({
         .join('\n');
     }
 
+    /* ------------------------------------------------------------------ *
+     * table-aware quoting                                                 *
+     *                                                                     *
+     * A table selection reaches us as tab-separated text, because that is *
+     * all `Selection.toString()` can produce. The structure is still in    *
+     * the DOM, so read the rows and cells there and rebuild a Markdown     *
+     * table instead.                                                      *
+     * ------------------------------------------------------------------ */
+
+    function elementOf(node) {
+      if (!node) return null;
+      return node.nodeType === 1 ? node : node.parentElement;
+    }
+
+    /** The one table both ends of the selection sit in, or null. */
+    function commonTable(sel) {
+      const startEl = elementOf(sel.anchorNode);
+      const endEl = elementOf(sel.focusNode);
+      const a = startEl && typeof startEl.closest === 'function' ? startEl.closest('table') : null;
+      const b = endEl && typeof endEl.closest === 'function' ? endEl.closest('table') : null;
+      return a && a === b ? a : null;
+    }
+
+    function cellText(cell) {
+      return String(cell.textContent || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    /**
+     * Markdown table for a selection that lies inside one table, or '' when
+     * the selection is not a table (or is a single plain cell, which reads no
+     * better as a one-row table).
+     */
+    function selectionTableMarkdown(sel) {
+      const table = commonTable(sel);
+      if (!table) return '';
+
+      let range = null;
+      try {
+        range = sel.getRangeAt(0);
+      } catch (err) {
+        return '';
+      }
+
+      const rows = [];
+      for (let i = 0; i < table.rows.length; i += 1) {
+        const row = table.rows[i];
+        let hit = false;
+        try {
+          hit = range.intersectsNode(row);
+        } catch (err) {
+          hit = false;
+        }
+        if (hit) rows.push(row);
+      }
+      if (rows.length === 0) return '';
+
+      const isHeaderRow = (row) =>
+        Array.prototype.some.call(row.cells, (cell) => cell.tagName === 'TH');
+      if (rows.length === 1 && !isHeaderRow(rows[0])) return '';
+
+      const grid = rows.map((row) => Array.prototype.map.call(row.cells, cellText));
+      const width = grid.reduce((max, cells) => Math.max(max, cells.length), 0);
+      if (width === 0) return '';
+
+      const padded = grid.map((cells) => {
+        const out = cells.slice();
+        while (out.length < width) out.push('');
+        return out;
+      });
+
+      const escape = (text) => text.replace(/\|/g, '\\|');
+      const line = (cells) => '| ' + cells.map(escape).join(' | ') + ' |';
+      const header = padded[0];
+      const divider = '| ' + header.map(() => '---').join(' | ') + ' |';
+      return [line(header), divider].concat(padded.slice(1).map(line)).join('\n');
+    }
+
     function legacyCopy(text) {
       try {
         const ta = document.createElement('textarea');
@@ -176,10 +255,12 @@ window.__ModuleLoader__.load({
           const sel = window.getSelection();
           if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
           const raw = sel.toString();
-          const quoted = normalizeQuote(raw);
-          if (!quoted) return;
           /* A selection typed inside the composer is an edit, not a quote. */
           if (isEditableNode(sel.anchorNode) || isEditableNode(sel.focusNode)) return;
+          /* A whole-table selection reads better as a Markdown table than as the
+           * tab-separated text the browser's clipboard projection produces. */
+          const quoted = selectionTableMarkdown(sel) || normalizeQuote(raw);
+          if (!quoted) return;
 
           const pos = place(sel, fallbackX, fallbackY);
           openRef.current = true;
