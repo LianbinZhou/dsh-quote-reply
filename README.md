@@ -63,9 +63,14 @@ git clone https://github.com/LianbinZhou/dsh-quote-reply.git
 | Slot | 作用域 | 干的事 |
 |---|---|---|
 | `shell.overlay` | root | 浮层菜单。监听 `mouseup`，读 `window.getSelection()`，自己画卡片 |
-| `conversation.input.overlay` | session | 收口。菜单层拿不到 `inputActions`（那是 session 作用域的 props），所以两层通过模块内的一个小注册表交接，由 sink 调 `inputActions.setDraft()` 把引用写进草稿 |
+| `conversation.input.overlay` | session | 收口。菜单层拿不到 `inputActions`（那是 session 作用域的 props），所以两层通过模块内的一个小注册表交接。sink 用 `useInput` 钩子读草稿，再调 `inputActions.setDraft()` 把引用写进草稿 |
 
-草稿里已经存在 `@文件` 引用胶囊时，改走旧的 `captureInsertion()` + `insertText()` 路径——重写整个草稿会把胶囊压成纯文本。
+`setDraft` 是"整篇重写"，所以它只在**草稿读得到、且草稿里没有 `@文件` 引用胶囊**时才用。另外两种情况改走 `captureInsertion()` + `insertText()`：
+
+1. 草稿里有引用胶囊——重写会把胶囊压成纯文本；
+2. 草稿**读不到**——那说明拿不到用户已经打好的内容，此刻重写等于把他的话抹掉（详见坑三）。
+
+写入位置：默认插在**光标停的位置**（向 `captureInsertion()` 要一个"带版本号的光标位置"）；要不到（版本对不上、光标是个选区、草稿里有胶囊）就追加到草稿末尾。
 
 > ⚠️ **收口为什么不在 `conversation.input.dock`？**（踩过的坑一）
 >
@@ -87,6 +92,27 @@ git clone https://github.com/LianbinZhou/dsh-quote-reply.git
 > 这个测量会抽风，把整个对话区顶得跳一下；**英文没有组字这一步，永远不跳**。
 > 代价：`setDraft` 是"重写整个草稿"，所以草稿里的引用胶囊活不下来（那种情况退回 `insertText`）。
 > 写入位置靠 `captureInsertion()` 向编辑器要"带版本号的光标位置"，要不到就落到草稿末尾。
+
+> ⚠️ **草稿为什么不能从 `props.input` 读？**（踩过的坑三：**不报错**的那个）
+>
+> 会话作用域的插槽条目，运行时只给这些标准属性：
+>
+> ```
+> useInput: SnapshotSelectorHook<InputState>   ← 草稿在这里（钩子）
+> inputActions: InputActions                   ← props 里唯一的一项
+> ```
+>
+> 也就是 `ctx.uiSession.provide({ hooks: ['conversation', 'input'], props: ['inputActions'] })`。
+> **`props.inputActions` 存在，`props.input` 永远是 `undefined`。**
+>
+> 危险在于它**不报错**：把 `undefined` 当成"草稿是空的"，`setDraft('' + 引用)` 就会把用户已经打好的字**静默抹掉**。
+> 输入框空着的时候测试，现象和预期完全一致（引用进来了），所以这个 bug 能一直藏着——**只有"先打字、再引用"才会暴露**。
+>
+> 正确写法：`const input = props.useInput((s) => s)`，并且严格区分 **"草稿是空的"（`''`）** 和 **"草稿读不到"（`null`）**——后者绝不能走重写路径。
+>
+> > 顺带一个坐标陷阱：`captureInsertion()` 返回的是 **detect 坐标**，而 `InputState.draft` 是 **clipboard 投影**。
+> > 两者只在**草稿里没有引用胶囊**时是同一个字符串（胶囊在 detect 里只占一个 `\uFFFC`，在 clipboard 里是完整的 `@文件名`）。
+> > 所以"拿 detect 的偏移去切 `draft`"只在无胶囊时成立——插件里也正是靠 `occurrences.length === 0` 把这两个条件绑在一起。
 
 **这个插件不发送任何模型请求、不写任何会话事件、不读别的插件的 DOM。** 引用只是普通文本，跟着你按发送键走正常流程。
 

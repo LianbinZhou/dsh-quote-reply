@@ -12,6 +12,8 @@
  *     carries no session props), so the two halves meet on the module-local
  *     `sinkHandlers` registry: the sink is the only side that holds
  *     `inputActions`, and it is the side that writes the quote into the draft.
+ *     The draft it preserves is read through the `useInput` hook, never a prop:
+ *     session slots are fed `props: ['inputActions']` plus the `input` hook.
  *
  *     It lives in the composer's floating layer, never in
  *     `conversation.input.dock`: a bare entry in that strip shifted the whole
@@ -457,10 +459,21 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     function QuoteSink(props) {
-      /* The handler must always see the newest props (inputActions and the
-       * draft snapshot) without re-registering on every render. */
+      /* The handler must always see the newest props (inputActions) and the
+       * newest draft without re-registering on every render.
+       *
+       * The draft is NOT a prop. A session slot is fed by
+       * `ctx.uiSession.provide({ hooks: ['conversation', 'input'], props:
+       * ['inputActions'] })`, so it arrives only through the `useInput` hook.
+       * Reading `props.input` yields undefined, and treating that as an empty
+       * draft makes `setDraft` wipe whatever the user had already typed. */
       const propsRef = useRef(props);
       propsRef.current = props;
+
+      const readInput = props.useInput;
+      const input = typeof readInput === 'function' ? readInput((s) => s) : null;
+      const inputRef = useRef(input);
+      inputRef.current = input;
 
       useEffect(() => {
         function handler(raw) {
@@ -471,19 +484,22 @@ window.__ModuleLoader__.load({
           const block = toQuoteBlock(raw);
           if (!block) return false;
 
-          const draft = p.input && typeof p.input.draft === 'string' ? p.input.draft : '';
-          const chips =
-            p.input && Array.isArray(p.input.occurrences) ? p.input.occurrences.length : 0;
+          const live = inputRef.current;
+          /* null means "the draft is unknown", which is not the same as "". */
+          const draft = live && typeof live.draft === 'string' ? live.draft : null;
+          const chips = live && Array.isArray(live.occurrences) ? live.occurrences.length : 0;
 
-          /* Aim at the spot the caret holds. `captureInsertion()` hands back a
-           * revision-guarded span of the editor selection; a stale revision, an
-           * open selection, or an editor that throws all mean "unknown", and an
-           * unknown spot falls back to the end of the draft. */
-          let at = draft.length;
-          if (typeof actions.captureInsertion === 'function') {
+          /* Aim at the spot the caret holds. `captureInsertion()` answers a
+           * revision-guarded span in detect coordinates; with no reference chip
+           * on the draft the detect and clipboard projections are the same
+           * string, so those offsets index the draft directly. A stale revision,
+           * an open selection, or an editor that throws all mean "unknown", and
+           * an unknown spot falls back to the end of the draft. */
+          let at = draft === null ? 0 : draft.length;
+          if (draft !== null && typeof actions.captureInsertion === 'function') {
             try {
               const span = actions.captureInsertion();
-              const revOk = span && p.input && span.draftRev === p.input.draftRev;
+              const revOk = span && live && span.draftRev === live.draftRev;
               const collapsed = span && span.start === span.end;
               const inRange = span && span.start >= 0 && span.start <= draft.length;
               if (revOk && collapsed && inRange) at = span.start;
@@ -492,7 +508,7 @@ window.__ModuleLoader__.load({
             }
           }
 
-          const prefix = draft.slice(0, at);
+          const prefix = draft === null ? '' : draft.slice(0, at);
 
           /* Keep the opening `>` on a line of its own so Markdown reads the
            * whole passage as one quote block. */
@@ -507,10 +523,12 @@ window.__ModuleLoader__.load({
            * keystroke of every IME composition (English never did). So write the
            * whole draft instead of inserting into it.
            *
-           * A draft holding reference chips cannot survive a rewrite: its
-           * clipboard projection has already expanded them to plain text. That
-           * case keeps the insert path. */
-          if (chips === 0 && typeof actions.setDraft === 'function') {
+           * `setDraft` replaces the draft wholesale, so it is only safe while
+           * the current draft is actually known; an unknown draft keeps the
+           * insert path, which never destroys what the user wrote. A draft
+           * holding reference chips also keeps it: their clipboard projection
+           * has already expanded them to plain text. */
+          if (draft !== null && chips === 0 && typeof actions.setDraft === 'function') {
             try {
               actions.setDraft(prefix + payload + draft.slice(at));
               return true;
