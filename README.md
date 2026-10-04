@@ -73,6 +73,7 @@ git clone https://github.com/LianbinZhou/dsh-quote-reply.git
 | `client.js` | 浏览器半。浮层菜单 + composer 收口，零依赖 |
 | `cordis.patch.yml` | bundle 的 patch 入口，往插件名单里插一行 |
 | `package.json` | 包清单，`dsh.client` 段声明浏览器侧入口 |
+| `locale/en.json`、`locale/zh.json` | 插件列表里显示的名称与描述（`{ meta: { title, description } }`）。**必须同时列进 `package.json` 的 `exports`**，否则 DSH 解析不到，列表里就是空白 |
 
 ## License
 
