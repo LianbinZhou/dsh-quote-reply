@@ -475,9 +475,28 @@ window.__ModuleLoader__.load({
           const chips =
             p.input && Array.isArray(p.input.occurrences) ? p.input.occurrences.length : 0;
 
+          /* Aim at the spot the caret holds. `captureInsertion()` hands back a
+           * revision-guarded span of the editor selection; a stale revision, an
+           * open selection, or an editor that throws all mean "unknown", and an
+           * unknown spot falls back to the end of the draft. */
+          let at = draft.length;
+          if (typeof actions.captureInsertion === 'function') {
+            try {
+              const span = actions.captureInsertion();
+              const revOk = span && p.input && span.draftRev === p.input.draftRev;
+              const collapsed = span && span.start === span.end;
+              const inRange = span && span.start >= 0 && span.start <= draft.length;
+              if (revOk && collapsed && inRange) at = span.start;
+            } catch (err) {
+              at = draft.length;
+            }
+          }
+
+          const prefix = draft.slice(0, at);
+
           /* Keep the opening `>` on a line of its own so Markdown reads the
            * whole passage as one quote block. */
-          const lead = draft !== '' && !draft.endsWith('\n') ? '\n' : '';
+          const lead = prefix !== '' && !prefix.endsWith('\n') ? '\n' : '';
           const payload = lead + block + '\n\n';
 
           /* `insertText` pushes a multi-line passage through Lexical's
@@ -493,7 +512,7 @@ window.__ModuleLoader__.load({
            * case keeps the insert path. */
           if (chips === 0 && typeof actions.setDraft === 'function') {
             try {
-              actions.setDraft(draft + payload);
+              actions.setDraft(prefix + payload + draft.slice(at));
               return true;
             } catch (err) {
               console.error('[dsh-quote-reply] setDraft failed, falling back to insertText', err);
