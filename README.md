@@ -61,9 +61,16 @@ git clone https://github.com/LianbinZhou/dsh-quote-reply.git
 | Slot | 作用域 | 干的事 |
 |---|---|---|
 | `shell.overlay` | root | 浮层菜单。监听 `mouseup`，读 `window.getSelection()`，自己画卡片 |
-| `conversation.input.dock` | session | 收口。菜单层拿不到 `inputActions`（那是 session 作用域的 props），所以两层通过模块内的一个小注册表交接，由 sink 调 `inputActions.captureInsertion()` + `insertText()` 把引用写进草稿 |
+| `conversation.input.overlay` | session | 收口。菜单层拿不到 `inputActions`（那是 session 作用域的 props），所以两层通过模块内的一个小注册表交接，由 sink 调 `inputActions.captureInsertion()` + `insertText()` 把引用写进草稿 |
 
 写草稿失败时（比如草稿版本变了）退化为 `setDraft(现有草稿 + 引用)`。
+
+> ⚠️ **收口为什么不在 `conversation.input.dock`？**（踩过的坑）
+>
+> `dock` 是输入框**上方**那条，而且**每次输入都会重渲染**。一个"只为拿 props、不画任何东西"的条目挂上去，
+> 会让**中文输入法组字的第一下**（`compositionstart`）把整个对话区连着输入框顶得抖一下；
+> **纯英文输入却不抖**——英文是逐字上屏，中文要先进入组字状态，两条路径不一样。
+> 挪到 composer 内部的浮层 `conversation.input.overlay` 之后症状消失：那里"关闭状态不画东西"本来就是常态（slash 菜单平时就住那儿）。
 
 **这个插件不发送任何模型请求、不写任何会话事件、不读别的插件的 DOM。** 引用只是普通文本，跟着你按发送键走正常流程。
 
