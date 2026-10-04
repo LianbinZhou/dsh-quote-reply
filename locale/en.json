@@ -1,6 +1,5 @@
 {
   "meta": {
-    "title": "Quote reply",
     "description": "Select text in the conversation and a floating card offers Quote / Copy; Quote drops the passage into the composer so the next message carries the exact text it is about."
   }
 }
