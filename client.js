@@ -466,12 +466,41 @@ window.__ModuleLoader__.load({
         function handler(raw) {
           const p = propsRef.current || {};
           const actions = p.inputActions;
-          if (!actions || typeof actions.insertText !== 'function') return false;
+          if (!actions) return false;
 
           const block = toQuoteBlock(raw);
           if (!block) return false;
 
-          const draft = p.input && typeof p.input.draft === 'string' ? p.input.draft : null;
+          const draft = p.input && typeof p.input.draft === 'string' ? p.input.draft : '';
+          const chips =
+            p.input && Array.isArray(p.input.occurrences) ? p.input.occurrences.length : 0;
+
+          /* Keep the opening `>` on a line of its own so Markdown reads the
+           * whole passage as one quote block. */
+          const lead = draft !== '' && !draft.endsWith('\n') ? '\n' : '';
+          const payload = lead + block + '\n\n';
+
+          /* `insertText` pushes a multi-line passage through Lexical's
+           * RangeSelection.insertText, which keeps every line inside ONE
+           * paragraph as soft line breaks. Typing the same text by hand, or
+           * writing it with `setDraft`, yields one paragraph per line — and only
+           * the insertText shape made the conversation lurch on the first
+           * keystroke of every IME composition (English never did). So write the
+           * whole draft instead of inserting into it.
+           *
+           * A draft holding reference chips cannot survive a rewrite: its
+           * clipboard projection has already expanded them to plain text. That
+           * case keeps the insert path. */
+          if (chips === 0 && typeof actions.setDraft === 'function') {
+            try {
+              actions.setDraft(draft + payload);
+              return true;
+            } catch (err) {
+              console.error('[dsh-quote-reply] setDraft failed, falling back to insertText', err);
+            }
+          }
+
+          if (typeof actions.insertText !== 'function') return false;
 
           let span = null;
           try {
@@ -479,31 +508,14 @@ window.__ModuleLoader__.load({
           } catch (err) {
             span = null;
           }
-
-          /* Keep the opening `>` on a line of its own so Markdown reads the
-           * whole passage as one quote block. */
-          let lead = '';
-          if (draft !== null && span && typeof span.start === 'number' && span.start > 0) {
-            if (draft.charAt(span.start - 1) !== '\n') lead = '\n';
-          }
-          const payload = lead + block + '\n\n';
-
-          if (span) {
-            try {
-              if (actions.insertText(payload, span)) return true;
-            } catch (err) {
-              console.error('[dsh-quote-reply] insertText failed, falling back to setDraft', err);
-            }
-          }
+          if (!span) return false;
 
           try {
-            const current = draft === null ? '' : draft;
-            actions.setDraft(current + payload);
-            return true;
+            if (actions.insertText(payload, span)) return true;
           } catch (err) {
-            console.error('[dsh-quote-reply] could not place the quote', err);
-            return false;
+            console.error('[dsh-quote-reply] insertText failed', err);
           }
+          return false;
         }
 
         sinkHandlers.add(handler);
